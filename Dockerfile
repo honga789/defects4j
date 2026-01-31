@@ -34,15 +34,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Setup Defects4J
 #############################################################################
 
-# ----------- Step 1. Clone defects4j from github --------------
-WORKDIR /
-RUN git clone https://github.com/rjust/defects4j.git defects4j
+# Add Defects4J's executables to PATH
+ENV PATH="/defects4j/framework/bin:${PATH}"
 
-# ----------- Step 2. Initialize Defects4J ---------------------
+# Set working directory (will be mounted from host)
 WORKDIR /defects4j
-RUN cpanm --installdeps .
-RUN ./init.sh
-
-# ----------- Step 3. Add Defects4J's executables to PATH: ------
-ENV PATH="/defects4j/framework/bin:${PATH}"  
-#--------------

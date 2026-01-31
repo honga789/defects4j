@@ -3,8 +3,72 @@ framework/lib/build-analyzer-*.jar
 framework/lib/build_systems
 framework/lib/test_generation/*
 !framework/lib/test_generation/bin
+
+# Trace agent build artifacts
+framework/lib/trace-agent/build/
+framework/lib/trace-agent/lib/
+
+# Python cache
+framework/util/__pycache__/
+*.pyc
+__pycache__/
+
+# Test results and logs
 framework/test/*.log
+
+# Project repositories
 project_repos/*
 !project_repos/get_repos.sh
+
+# Build outputs
 major/
 work/
+
+# Generated traces and workspace artifacts
+traces/
+workspace/traces/
+workspace/Math_*_buggy/
+workspace/Math_*_fixed/
+workspace/Lang_*_buggy/
+workspace/Lang_*_fixed/
+workspace/Chart_*_buggy/
+workspace/Chart_*_fixed/
+workspace/Cli_*_buggy/
+workspace/Cli_*_fixed/
+workspace/Closure_*_buggy/
+workspace/Closure_*_fixed/
+workspace/Codec_*_buggy/
+workspace/Codec_*_fixed/
+workspace/Collections_*_buggy/
+workspace/Collections_*_fixed/
+workspace/Compress_*_buggy/
+workspace/Compress_*_fixed/
+workspace/Csv_*_buggy/
+workspace/Csv_*_fixed/
+workspace/Gson_*_buggy/
+workspace/Gson_*_fixed/
+workspace/JacksonCore_*_buggy/
+workspace/JacksonCore_*_fixed/
+workspace/JacksonDatabind_*_buggy/
+workspace/JacksonDatabind_*_fixed/
+workspace/JacksonXml_*_buggy/
+workspace/JacksonXml_*_fixed/
+workspace/Jsoup_*_buggy/
+workspace/Jsoup_*_fixed/
+workspace/JxPath_*_buggy/
+workspace/JxPath_*_fixed/
+workspace/Mockito_*_buggy/
+workspace/Mockito_*_fixed/
+workspace/Time_*_buggy/
+workspace/Time_*_fixed/
+
+# Debug and temp files
+workspace/debug_gt.py
+workspace/*.log
+workspace/*.tmp
+
+# Old versions
+v1-D_1/
+
+# Documentation (exclude from repo)
+bug-localization_icse25.pdf
