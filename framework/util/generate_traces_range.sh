@@ -138,6 +138,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Create log file in defects4j workspace
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 LOG_FILE="logs_generate_traces_${PROJECT}_${BUG_START}_to_${BUG_END}_${TIMESTAMP}.log"
+FAILED_LOG="logs_generate_traces_${PROJECT}_${BUG_START}_to_${BUG_END}_${TIMESTAMP}_FAILED.log"
+
+# Arrays to track successful and failed bugs
+SUCCESSFUL_BUGS=()
+FAILED_BUGS=()
 
 # Build base command arguments
 CMD_ARGS="-p $PROJECT"
@@ -155,6 +160,7 @@ CMD_ARGS="-p $PROJECT"
 echo "========================================" | tee "$LOG_FILE"
 echo "Generate Traces Range: $PROJECT bugs $BUG_START to $BUG_END" | tee -a "$LOG_FILE"
 echo "Log file: $LOG_FILE" | tee -a "$LOG_FILE"
+echo "Failed bugs log: $FAILED_LOG" | tee -a "$LOG_FILE"
 echo "========================================" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
@@ -166,7 +172,30 @@ for BUG_ID in $(seq $BUG_START $BUG_END); do
     echo "========================================" | tee -a "$LOG_FILE"
     
     # Run generate_traces.sh and capture all output
-    bash "$SCRIPT_DIR/generate_traces.sh" $CMD_ARGS -b "$BUG_ID" 2>&1 | tee -a "$LOG_FILE"
+    # Create temporary file to capture output
+    TEMP_OUTPUT=$(mktemp)
+    bash "$SCRIPT_DIR/generate_traces.sh" $CMD_ARGS -b "$BUG_ID" 2>&1 | tee "$TEMP_OUTPUT" | tee -a "$LOG_FILE"
+    
+    # Check if build failed by looking for failure indicators in output
+    if grep -q "BUILD FAILED\|Cannot compile sources\|Compilation failed" "$TEMP_OUTPUT"; then
+        echo "[ERROR] Build failed for $PROJECT Bug #$BUG_ID" | tee -a "$LOG_FILE" | tee -a "$FAILED_LOG"
+        FAILED_BUGS+=("$BUG_ID")
+        
+        # Extract and log the error details
+        echo "========================================" >> "$FAILED_LOG"
+        echo "Bug ID: $PROJECT-$BUG_ID" >> "$FAILED_LOG"
+        echo "Timestamp: $(date)" >> "$FAILED_LOG"
+        echo "----------------------------------------" >> "$FAILED_LOG"
+        grep -A 20 "BUILD FAILED\|Cannot compile sources\|Compilation failed" "$TEMP_OUTPUT" | head -30 >> "$FAILED_LOG"
+        echo "========================================" >> "$FAILED_LOG"
+        echo "" >> "$FAILED_LOG"
+    else
+        echo "[SUCCESS] Completed $PROJECT Bug #$BUG_ID" | tee -a "$LOG_FILE"
+        SUCCESSFUL_BUGS+=("$BUG_ID")
+    fi
+    
+    # Clean up temporary file
+    rm -f "$TEMP_OUTPUT"
     
     echo "" | tee -a "$LOG_FILE"
     echo "Finished $PROJECT Bug #$BUG_ID at: $(date)" | tee -a "$LOG_FILE"
@@ -175,7 +204,46 @@ done
 
 echo "========================================" | tee -a "$LOG_FILE"
 echo "All bugs processed" | tee -a "$LOG_FILE"
+echo "========================================" | tee -a "$LOG_FILE"
+echo "" | tee -a "$LOG_FILE"
+
+# Print summary
+echo "SUMMARY:" | tee -a "$LOG_FILE"
+echo "--------" | tee -a "$LOG_FILE"
+echo "Total bugs processed: $((BUG_END - BUG_START + 1))" | tee -a "$LOG_FILE"
+echo "Successful: ${#SUCCESSFUL_BUGS[@]}" | tee -a "$LOG_FILE"
+echo "Failed: ${#FAILED_BUGS[@]}" | tee -a "$LOG_FILE"
+echo "" | tee -a "$LOG_FILE"
+
+if [ ${#SUCCESSFUL_BUGS[@]} -gt 0 ]; then
+    echo "Successful bugs: ${SUCCESSFUL_BUGS[*]}" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+fi
+
+if [ ${#FAILED_BUGS[@]} -gt 0 ]; then
+    echo "Failed bugs: ${FAILED_BUGS[*]}" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    echo "Details of failed bugs saved to: $FAILED_LOG" | tee -a "$LOG_FILE"
+    echo "" | tee -a "$LOG_FILE"
+    
+    # Also save summary to failed log
+    echo "========================================" >> "$FAILED_LOG"
+    echo "SUMMARY OF FAILURES" >> "$FAILED_LOG"
+    echo "========================================" >> "$FAILED_LOG"
+    echo "Project: $PROJECT" >> "$FAILED_LOG"
+    echo "Bug range: $BUG_START to $BUG_END" >> "$FAILED_LOG"
+    echo "Total failures: ${#FAILED_BUGS[@]}" >> "$FAILED_LOG"
+    echo "Failed bug IDs: ${FAILED_BUGS[*]}" >> "$FAILED_LOG"
+    echo "Timestamp: $(date)" >> "$FAILED_LOG"
+    echo "========================================" >> "$FAILED_LOG"
+fi
+
 echo "Log saved to: $LOG_FILE" | tee -a "$LOG_FILE"
 echo "========================================" | tee -a "$LOG_FILE"
+
+# Exit with error code if any bugs failed
+if [ ${#FAILED_BUGS[@]} -gt 0 ]; then
+    exit 1
+fi
 
 exit 0

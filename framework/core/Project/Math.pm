@@ -105,22 +105,48 @@ sub _layout2 {
 sub _post_checkout {
     my ($self, $revision_id, $work_dir) = @_;
 
-    # Convert the file encoding of problematic files
-    my $result = determine_layout($self, $revision_id);
-    Utils::convert_file_encoding($work_dir."/".$result->{src}."/org/apache/commons/math3/stat/correlation/StorelessBivariateCovariance.java");
-    Utils::convert_file_encoding($work_dir."/".$result->{src}."/org/apache/commons/math3/stat/correlation/StorelessCovariance.java");
-
-    # Set source and target version in javac targets.
+    # Set source, target version, and ISO-8859-1 encoding in javac targets.
+    # This fixes encoding issues with files containing non-ASCII characters
+    # (e.g., HermiteInterpolator.java, StorelessBivariateCovariance.java, etc.)
+    # The original source files are encoded in ISO-8859-1, not UTF-8.
     my $jvm_version="1.6";
 
     if (-e "$work_dir/build.xml") {
         rename("$work_dir/build.xml", "$work_dir/build.xml.bak");
         open(IN, "<$work_dir/build.xml.bak") or die $!;
         open(OUT, ">$work_dir/build.xml") or die $!;
+        
+        # Track if we're inside a <javac> element (may span multiple lines)
+        my $in_javac = 0;
+        my $javac_has_encoding = 0;
+        
         while(<IN>) {
             my $l = $_;
+            
+            # Old-style build.xml (uses deprecation="true") - add target and source version
             $l =~ s/(javac destdir="\$\{classesdir\}" deprecation="true")/$1 target="${jvm_version}" source="${jvm_version}"/g;
             $l =~ s/(javac destdir="\$\{testclassesdir\}" deprecation="true")/$1 target="${jvm_version}" source="${jvm_version}"/g;
+            
+            # Change source.encoding property from UTF-8 to ISO-8859-1
+            # This ensures all javac tasks using ${source.encoding} get the correct encoding
+            $l =~ s/(<property\s+name="source\.encoding"\s+value=")UTF-8(".*\/>)/$1ISO-8859-1$2/g;
+            
+            # Track javac elements to handle multi-line encoding attributes
+            if ($l =~ /<javac\s/) {
+                $in_javac = 1;
+                $javac_has_encoding = ($l =~ /encoding=/) ? 1 : 0;
+            }
+            if ($in_javac && $l =~ /encoding=/) {
+                $javac_has_encoding = 1;
+            }
+            if ($in_javac && $l =~ />/) {
+                # End of javac opening tag - add encoding if not present
+                if (!$javac_has_encoding && $l =~ />/) {
+                    $l =~ s/>/ encoding="ISO-8859-1">/;
+                }
+                $in_javac = 0 if $l !~ /<javac/; # Only reset if this isn't the same line as <javac
+            }
+            
             $l =~ s/value="1\.[1-5]"/value="${jvm_version}"/g;
 
             print OUT $l;
