@@ -116,8 +116,8 @@ sub _post_checkout {
         open(IN, "<$work_dir/build.xml.bak") or die $!;
         open(OUT, ">$work_dir/build.xml") or die $!;
         
-        # Track if we're inside a <javac> element (may span multiple lines)
-        my $in_javac = 0;
+        # Track if we're inside an UNCLOSED <javac tag (attributes may span multiple lines)
+        my $in_javac_tag = 0;
         my $javac_has_encoding = 0;
         
         while(<IN>) {
@@ -131,20 +131,33 @@ sub _post_checkout {
             # This ensures all javac tasks using ${source.encoding} get the correct encoding
             $l =~ s/(<property\s+name="source\.encoding"\s+value=")UTF-8(".*\/>)/$1ISO-8859-1$2/g;
             
-            # Track javac elements to handle multi-line encoding attributes
+            # Track <javac ...> opening tag to handle multi-line attributes
+            # We only care about the opening tag itself, not nested elements
             if ($l =~ /<javac\s/) {
-                $in_javac = 1;
+                $in_javac_tag = 1;
                 $javac_has_encoding = ($l =~ /encoding=/) ? 1 : 0;
-            }
-            if ($in_javac && $l =~ /encoding=/) {
-                $javac_has_encoding = 1;
-            }
-            if ($in_javac && $l =~ />/) {
-                # End of javac opening tag - add encoding if not present
-                if (!$javac_has_encoding && $l =~ />/) {
-                    $l =~ s/>/ encoding="ISO-8859-1">/;
+                
+                # If javac tag closes on same line (has >), process it immediately
+                if ($l =~ />/) {
+                    if (!$javac_has_encoding) {
+                        # Add encoding before the first > that closes the javac tag
+                        $l =~ s/>/ encoding="ISO-8859-1">/;
+                    }
+                    $in_javac_tag = 0;  # Tag is closed, reset
                 }
-                $in_javac = 0 if $l !~ /<javac/; # Only reset if this isn't the same line as <javac
+            }
+            # If we're in an unclosed javac tag (attributes spanning multiple lines)
+            elsif ($in_javac_tag) {
+                if ($l =~ /encoding=/) {
+                    $javac_has_encoding = 1;
+                }
+                # Look for the closing > of the javac opening tag
+                if ($l =~ />/) {
+                    if (!$javac_has_encoding) {
+                        $l =~ s/>/ encoding="ISO-8859-1">/;
+                    }
+                    $in_javac_tag = 0;  # Tag is closed, reset
+                }
             }
             
             $l =~ s/value="1\.[1-5]"/value="${jvm_version}"/g;
