@@ -124,8 +124,8 @@ sub _post_checkout {
         open(IN, '<'."$work_dir/build.xml".'.bak') or die $!;
         open(OUT, '>'."$work_dir/build.xml") or die $!;
         while(<IN>) {
-            $_ =~ s/javac destdir="\$\{classesdir\}" deprecation="true"/javac destdir="\$\{classesdir\}" target="${jvm_version}" source="${jvm_version}" deprecation="true"/g;
-            $_ =~ s/javac destdir="\$\{testclassesdir\}" deprecation="true"/javac destdir="\$\{testclassesdir\}" target="${jvm_version}" source="${jvm_version}" deprecation="true"/g;
+            $_ =~ s/javac destdir="\$\{classesdir\}" deprecation="true"/javac destdir="\$\{classesdir\}" target="${jvm_version}" source="${jvm_version}" encoding="UTF-8" deprecation="true"/g;
+            $_ =~ s/javac destdir="\$\{testclassesdir\}" deprecation="true"/javac destdir="\$\{testclassesdir\}" target="${jvm_version}" source="${jvm_version}" encoding="UTF-8" deprecation="true"/g;
             $_ =~ s/compile-tests/compile\.tests/g;
             $_ =~ s/build\.classpath/compile\.classpath/g;
             $_ =~ s/classesdir/classes\.dir/g;
