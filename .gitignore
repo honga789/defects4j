@@ -26,6 +26,8 @@ work/
 
 # Generated traces and workspace artifacts
 traces/
+traces-20-pass/
+workspace/
 workspace/traces/
 workspace/Math_*_buggy/
 workspace/Math_*_fixed/

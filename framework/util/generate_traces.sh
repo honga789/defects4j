@@ -65,7 +65,7 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to count @Test methods in a Java test class
+# Function to count test methods in a Java test class (supports both JUnit 3 and JUnit 4)
 count_test_methods() {
     local test_class="$1"
     local base_dir="$2"
@@ -87,12 +87,25 @@ count_test_methods() {
     fi
     
     if [ -f "$file_path" ]; then
-        # Count @Test annotations - ensure clean integer output
-        local count
-        count=$(grep -c '@Test' "$file_path" 2>/dev/null || echo "0")
-        # Strip all whitespace and ensure it's a valid number
-        count=$(echo "$count" | tr -d '[:space:]')
-        # Validate it's a number, default to 0 if not
+        local count=0
+        
+        # JUnit 4: Count @Test annotations
+        local junit4_count=$(grep -c '@Test' "$file_path" 2>/dev/null || echo "0")
+        junit4_count=$(echo "$junit4_count" | tr -d '[:space:]')
+        
+        # JUnit 3: Count public void test*() methods
+        # Pattern: public void testSomething(...) {
+        local junit3_count=$(grep -E '^\s*(public\s+)?void\s+test[A-Z]' "$file_path" 2>/dev/null | wc -l | tr -d '[:space:]')
+        
+        # Use the maximum of the two counts
+        if [[ "$junit4_count" =~ ^[0-9]+$ ]] && [ "$junit4_count" -gt "$count" ]; then
+            count=$junit4_count
+        fi
+        if [[ "$junit3_count" =~ ^[0-9]+$ ]] && [ "$junit3_count" -gt "$count" ]; then
+            count=$junit3_count
+        fi
+        
+        # Validate result
         if [[ "$count" =~ ^[0-9]+$ ]]; then
             echo "$count"
         else
@@ -245,12 +258,35 @@ TEST_CP=$(defects4j export -p cp.test)
 CLASSES_DIR=$(defects4j export -p dir.bin.classes)
 TESTS_DIR=$(defects4j export -p dir.bin.tests)
 
+# Ensure JUnit 4 is on the classpath (required by JUnitCore runner).
+# Some projects (e.g., Cli-1) only ship JUnit 3, which lacks org.junit.runner.JUnitCore.
+TRACE_AGENT_LIB="${D4J_HOME}/framework/lib/trace-agent/lib"
+JUNIT4_JAR="${TRACE_AGENT_LIB}/junit-4.13.2.jar"
+HAMCREST_JAR="${TRACE_AGENT_LIB}/hamcrest-core-1.3.jar"
+
+if ! echo "$TEST_CP" | tr ':' '\n' | grep -q "junit-4"; then
+    log_info "JUnit 4 not found on test classpath, adding JUnit 4 jars..."
+    if [ -f "$JUNIT4_JAR" ] && [ -f "$HAMCREST_JAR" ]; then
+        TEST_CP="${JUNIT4_JAR}:${HAMCREST_JAR}:${TEST_CP}"
+    else
+        # Fallback: try the combined jar from the projects lib
+        COMBINED_JAR="${D4J_HOME}/framework/projects/lib/junit-4.12-hamcrest-1.3.jar"
+        if [ -f "$COMBINED_JAR" ]; then
+            TEST_CP="${COMBINED_JAR}:${TEST_CP}"
+        else
+            log_warn "JUnit 4 not found! Tests may fail to run."
+        fi
+    fi
+fi
+
 # Build agent arguments
 AGENT_ARGS=""
 if [ -n "$FILTER" ]; then
     AGENT_ARGS="filter=${FILTER}"
 fi
-
+# Stderr log for debugging test runner issues
+STDERR_LOG="${TRACE_OUTPUT_DIR}/runner-stderr.log"
+> "$STDERR_LOG"
 # Step 5: Run failing tests with tracing
 log_info "[Step 5/7] Running failing tests with tracing..."
 log_info "  Max subtests threshold: ${MAX_SUBTESTS}"
@@ -306,7 +342,7 @@ while IFS= read -r test; do
              -Dtrace.output="$TRACE_FILE" \
              -cp "${TRACE_AGENT}:${TEST_CP}" \
              edu.defects4j.trace.SingleTestRunner "$TEST_CLASS" "$TEST_METHOD" \
-             2>/dev/null || {
+             2>>"$STDERR_LOG" || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 137 ] || [ $EXIT_CODE -eq 124 ]; then
                 TIMED_OUT=true
@@ -318,7 +354,7 @@ while IFS= read -r test; do
              -Dtrace.output="$TRACE_FILE" \
              -cp "${TRACE_AGENT}:${TEST_CP}" \
              org.junit.runner.JUnitCore "$TEST_CLASS" \
-             2>/dev/null || {
+             2>>"$STDERR_LOG" || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 137 ] || [ $EXIT_CODE -eq 124 ]; then
                 TIMED_OUT=true
@@ -426,7 +462,7 @@ if [ "$SKIP_PASS" = false ]; then
              -Dtrace.output="$TRACE_FILE" \
              -cp "${TRACE_AGENT}:${TEST_CP}" \
              org.junit.runner.JUnitCore "$test_class" \
-             2>/dev/null || {
+             2>>"$STDERR_LOG" || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 137 ] || [ $EXIT_CODE -eq 124 ]; then
                 TIMED_OUT=true
